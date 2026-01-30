@@ -1,10 +1,10 @@
 jobs:
   build:
     docker:
-      - image: cimg/base:stable                   # similar to "image" in GitLab
+      - image: cimg/base:stable
     steps:
       - checkout
-      - run: echo "This is a build step"          # similar to "script" in GitLab
+      - run: echo "This is a build step"
 
   test:
     docker:
@@ -13,16 +13,25 @@ jobs:
       - checkout
       - run: echo "This is a test step"
 
+  # ADICIONE ESTE JOB QUE ESTÁ FALTANDO
   integration:
     docker:
       - image: cimg/base:stable
     steps:
       - checkout
-      - run:
-          command: |
-            echo "This is an integration step"
-            exit 1
-          when: on_fail                 # Even if the job fails, continue to the next stages
+      - run: echo "Running integration tests"
+      # Adicione seus comandos de teste de integração aqui
+
+  zap_baseline:
+    machine: true
+    steps:
+      - checkout
+      - run: |
+          docker pull hysnsec/zap:2.16.1
+          docker run --user root --rm -v $(pwd):/zap/wrk:rw -w /zap hysnsec/zap:2.16.1 zap-baseline.py -t https://prod-4srhyn66.lab.practical-devsecops.training -J zap-output.json || true
+      - store_artifacts:
+          path: zap-output.json
+          destination: zap-artifact
 
   prod:
     docker:
@@ -36,7 +45,16 @@ workflows:
   django:
     jobs:
       - build
-      - test
-      - integration
+      - test:
+          requires:
+            - build
+      - integration:    # AGORA ESTE JOB EXISTE!
+          requires:
+            - test
+      - zap_baseline:
+          requires:
+            - integration
       - prod:
           type: approval
+          requires:
+            - zap_baseline
